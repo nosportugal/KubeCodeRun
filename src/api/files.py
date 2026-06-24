@@ -698,3 +698,23 @@ async def delete_file(session_id: str, file_id: str, file_service: FileServiceDe
             error=str(e),
         )
         raise HTTPException(status_code=500, detail="Failed to delete file")
+
+
+@router.delete("/sessions/{session_id}/objects/{file_id}")
+async def delete_session_object(
+    session_id: str,
+    file_id: str,
+    kind: str | None = Query(None, description="Resource kind: 'skill', 'agent', or 'user'"),
+    resource_id: str | None = Query(None, alias="id", description="Resource id (userId / agentId / skillId)"),
+    version: int | None = Query(None, description="Resource version (only meaningful for kind=skill)"),
+    file_service: FileServiceDep = None,
+):
+    """Delete a session object - LibreChat compatible alias of ``delete_file``.
+
+    LibreChat's ``deleteFile`` (process.js) issues ``DELETE /sessions/{session}/
+    objects/{file}`` first and only falls back to ``DELETE /files/{session}/
+    {file}`` on failure. Serving this path directly avoids the extra 404
+    round-trip. Query params ``kind``/``id``/``version`` are accepted for
+    parity with ``buildCodeEnvDownloadQuery`` but are not enforced today.
+    """
+    return await delete_file(session_id, file_id, file_service)
