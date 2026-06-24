@@ -26,6 +26,15 @@ class FileRef(BaseModel):
     resource_id: str | None = None
     kind: str | None = None  # 'skill' | 'agent' | 'user'
     version: int | None = None
+    inherited: bool = Field(
+        default=False,
+        description=(
+            "True when this entry is an unchanged passthrough of a read-only "
+            "input the caller already owns (skill/agent bundle), surfaced via "
+            "ExecResponse.inherited_files so callers can render inputs "
+            "distinctly from generated outputs."
+        ),
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -84,6 +93,16 @@ class ExecResponse(BaseModel):
     files: list[FileRef] = Field(default_factory=list)
     stdout: str = ""
     stderr: str = ""
+    inherited_files: list[FileRef] = Field(
+        default_factory=list,
+        description=(
+            "Read-only inputs (skill/agent bundles) the caller already owns, "
+            "echoed as unchanged passthroughs. Kept out of `files` so the "
+            "current @librechat/agents consumer does not surface them as "
+            "generated download artifacts; each entry carries `inherited: true` "
+            "for forward-compatible consumers."
+        ),
+    )
     # State persistence fields (Python only)
     has_state: bool = Field(
         default=False,

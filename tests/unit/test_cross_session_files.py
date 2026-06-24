@@ -168,6 +168,7 @@ class TestCrossSessionFileConsolidation:
             filename="data_b.csv",
             content=b"csv data",
             content_type="text/csv",
+            read_only=False,
         )
 
     @pytest.mark.asyncio

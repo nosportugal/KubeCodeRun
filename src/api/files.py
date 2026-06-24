@@ -314,6 +314,12 @@ async def upload_files_batch(
     succeeded = 0
     failed = 0
 
+    # ``read_only=true`` marks every file in the batch as infrastructure (a
+    # skill bundle). Persisted on file metadata so the executor can echo it
+    # back as an inherited input rather than surfacing it as a generated
+    # artifact (mirrors code-interpreter's X-Read-Only semantics).
+    read_only_flag = (read_only or "").strip().lower() == "true"
+
     for upload in upload_files:
         try:
             if upload.size and upload.size > settings.max_file_size_mb * 1024 * 1024:
@@ -326,6 +332,7 @@ async def upload_files_batch(
                 filename=sanitized_name,
                 content=content,
                 content_type=upload.content_type,
+                read_only=read_only_flag,
             )
             results.append(
                 {

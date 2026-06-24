@@ -226,6 +226,62 @@ class TestUploadBatchEndpoint:
         assert {f["fileId"] for f in result["files"]} == {"fid-a", "fid-b"}
 
     @pytest.mark.asyncio
+    async def test_batch_read_only_threaded_to_storage(self):
+        """``read_only=true`` is persisted on each stored file so the executor
+        can echo it as an inherited input instead of a generated artifact."""
+        session_service = MagicMock()
+        session_service.list_sessions_by_entity = AsyncMock(return_value=[])
+        session_service.create_session = AsyncMock(return_value=_mock_session("sess-b"))
+
+        file_service = MagicMock()
+        file_service.store_uploaded_file = AsyncMock(side_effect=["fid-a", "fid-b"])
+
+        await upload_files_batch(
+            request=_anon_http_request(),
+            file=[_mock_file("skillName/SKILL.md", b"x"), _mock_file("skillName/run.py", b"y")],
+            files=None,
+            entity_id=None,
+            kind="skill",
+            id="skill-123",
+            version="3",
+            read_only="true",
+            user_id_header=None,
+            x_user_id_header=None,
+            file_service=file_service,
+            session_service=session_service,
+        )
+
+        assert file_service.store_uploaded_file.await_count == 2
+        assert all(c.kwargs["read_only"] is True for c in file_service.store_uploaded_file.await_args_list)
+
+    @pytest.mark.asyncio
+    async def test_batch_read_only_defaults_false(self):
+        """Without ``read_only``, stored files default to writable (read_only=False)."""
+        session_service = MagicMock()
+        session_service.list_sessions_by_entity = AsyncMock(return_value=[])
+        session_service.create_session = AsyncMock(return_value=_mock_session("sess-b"))
+
+        file_service = MagicMock()
+        file_service.store_uploaded_file = AsyncMock(return_value="fid-a")
+
+        await upload_files_batch(
+            request=_anon_http_request(),
+            file=[_mock_file("data.csv", b"x")],
+            files=None,
+            entity_id=None,
+            kind="user",
+            id=None,
+            version=None,
+            read_only=None,
+            user_id_header=None,
+            x_user_id_header=None,
+            file_service=file_service,
+            session_service=session_service,
+        )
+
+        assert file_service.store_uploaded_file.await_args.kwargs["read_only"] is False
+
+    @pytest.mark.asyncio
     async def test_batch_kind_skill_persists_on_session_metadata(self):
         """``kind`` / ``id`` form fields land on session.metadata so the
         session can later be filtered by skill/resource."""

@@ -225,8 +225,12 @@ class CodeExecutionRunner:
                 ]
 
             mounted_filenames = self._get_mounted_filenames(files)
+            readonly_filenames = self._get_readonly_filenames(files)
             filtered_files = self._filter_generated_files(
-                generated_files, mounted_filenames, execution_start_unix=int(start_time.timestamp())
+                generated_files,
+                mounted_filenames,
+                execution_start_unix=int(start_time.timestamp()),
+                readonly_filenames=readonly_filenames,
             )
 
             for file_info in filtered_files:
@@ -346,6 +350,31 @@ class CodeExecutionRunner:
                 pass
         return mounted
 
+    def _get_readonly_filenames(self, files: list[dict[str, Any]] | None) -> set:
+        """Get the set of mounted file names flagged ``read_only``.
+
+        Read-only files are infrastructure inputs (skill/agent bundles) the
+        caller already owns. They must never be surfaced as generated
+        artifacts even if the sandbox touched them, so callers don't get
+        ghost downloads for files they uploaded. Mirrors the full/basename/
+        normalized expansion of ``_get_mounted_filenames`` so the match works
+        for nested skill paths.
+        """
+        readonly = set()
+        if files:
+            try:
+                for f in files:
+                    if not f.get("read_only"):
+                        continue
+                    name = f.get("filename") or f.get("name")
+                    if name:
+                        readonly.add(name)
+                        readonly.add(Path(name).name)
+                        readonly.add(OutputProcessor.normalize_filename(name))
+            except Exception:
+                pass
+        return readonly
+
     @staticmethod
     def _relative_under_data(path: str) -> str:
         """Return the path relative to /mnt/data, or the basename as fallback."""
@@ -359,6 +388,7 @@ class CodeExecutionRunner:
         generated: list[dict[str, Any]],
         mounted_filenames: set,
         execution_start_unix: int = 0,
+        readonly_filenames: set | None = None,
     ) -> list[dict[str, Any]]:
         """Filter generated files, keeping new files and modified mounted files.
 
@@ -367,13 +397,19 @@ class CodeExecutionRunner:
         ``skillName/SKILL.md``) are correctly recognized as mounted rather than
         reported as freshly generated. A mounted file is still included if its
         mod_time indicates it was modified during or after execution started
-        (fixes issue #56).
+        (fixes issue #56) — UNLESS it is flagged ``read_only``: read-only
+        inputs (skill/agent bundles) are always excluded so the caller never
+        sees a ghost download for an infrastructure file it already owns.
         """
+        readonly_filenames = readonly_filenames or set()
         result = []
         for f in generated:
             path = f.get("path", "")
             rel = self._relative_under_data(path)
             base = Path(path).name
+            if rel in readonly_filenames or base in readonly_filenames:
+                # Read-only input — never surface as a generated artifact.
+                continue
             is_mounted = rel in mounted_filenames or base in mounted_filenames
             if not is_mounted:
                 # New file — always include

@@ -444,6 +444,7 @@ class ExecutionOrchestrator:
                     "session_id": file_ref.session_id,
                     "content": content,
                     "auto_mounted": False,
+                    "read_only": file_info.read_only,
                 }
             )
             mounted_keys.add(key)
@@ -459,6 +460,7 @@ class ExecutionOrchestrator:
                         filename=file_info.filename,
                         content=content,
                         content_type=file_info.content_type,
+                        read_only=file_info.read_only,
                     )
                     logger.info(
                         "Consolidated cross-session file",
@@ -526,6 +528,7 @@ class ExecutionOrchestrator:
                         "session_id": ctx.session_id,
                         "content": content,
                         "auto_mounted": True,
+                        "read_only": file_info.read_only,
                     }
                 )
                 mounted_keys.add(key)
@@ -786,11 +789,27 @@ class ExecutionOrchestrator:
 
         auto_mounted = sum(1 for f in ctx.mounted_files if f.get("auto_mounted")) if ctx.mounted_files else 0
 
+        # Echo read-only inputs (skill/agent bundles the caller already owns)
+        # as inherited passthroughs. They are deliberately kept out of `files`
+        # so the current @librechat/agents consumer does not surface them as
+        # generated download artifacts (it ignores the `inherited` flag).
+        inherited_files = [
+            FileRef(
+                id=f["file_id"],
+                name=f["filename"],
+                session_id=f.get("session_id"),
+                inherited=True,
+            )
+            for f in (ctx.mounted_files or [])
+            if f.get("read_only")
+        ]
+
         return ExecResponse(
             session_id=ctx.session_id,
             files=ctx.generated_files or [],
             stdout=ctx.stdout,
             stderr=ctx.stderr,
+            inherited_files=inherited_files,
             has_state=has_state,
             state_size=state_size,
             state_hash=state_hash,
