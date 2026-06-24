@@ -151,6 +151,10 @@ class TestUploadResponseShape:
             file=_mock_file(),
             files=None,
             entity_id=None,
+            kind=None,
+            id=None,
+            version=None,
+            read_only=None,
             user_id_header=None,
             x_user_id_header=None,
             file_service=file_service,
@@ -181,6 +185,10 @@ class TestUploadResponseShape:
             file=_mock_file(filename="skillName/SKILL.md"),
             files=None,
             entity_id=None,
+            kind=None,
+            id=None,
+            version=None,
+            read_only=None,
             user_id_header=None,
             x_user_id_header=None,
             file_service=file_service,
@@ -190,6 +198,67 @@ class TestUploadResponseShape:
         stored_name = file_service.store_uploaded_file.call_args.kwargs["filename"]
         assert stored_name == "skillName/SKILL.md"
         assert result["files"][0]["filename"] == "skillName/SKILL.md"
+
+    @pytest.mark.asyncio
+    async def test_upload_threads_identity_fields(self):
+        """Single /upload accepts kind/id/version/read_only like /upload/batch:
+        ``read_only`` is persisted on the file and ``kind`` / ``id`` land on
+        session metadata."""
+        from src.models.session import SessionCreate
+
+        session_service = MagicMock()
+        session_service.list_sessions_by_entity = AsyncMock(return_value=[])
+        session_service.create_session = AsyncMock(return_value=_mock_session("sess-1"))
+
+        file_service = MagicMock()
+        file_service.store_uploaded_file = AsyncMock(return_value="fid-1")
+
+        await upload_file(
+            request=_anon_http_request(),
+            file=_mock_file(filename="skillName/SKILL.md"),
+            files=None,
+            entity_id=None,
+            kind="skill",
+            id="skill-123",
+            version="3",
+            read_only="true",
+            user_id_header="user-A",
+            x_user_id_header=None,
+            file_service=file_service,
+            session_service=session_service,
+        )
+
+        assert file_service.store_uploaded_file.call_args.kwargs["read_only"] is True
+        sc: SessionCreate = session_service.create_session.call_args.args[0]
+        assert sc.metadata.get("kind") == "skill"
+        assert sc.metadata.get("resource_id") == "skill-123"
+
+    @pytest.mark.asyncio
+    async def test_upload_read_only_defaults_false(self):
+        """Without identity fields, single /upload defaults read_only=False."""
+        session_service = MagicMock()
+        session_service.list_sessions_by_entity = AsyncMock(return_value=[])
+        session_service.create_session = AsyncMock(return_value=_mock_session("sess-1"))
+
+        file_service = MagicMock()
+        file_service.store_uploaded_file = AsyncMock(return_value="fid-1")
+
+        await upload_file(
+            request=_anon_http_request(),
+            file=_mock_file(),
+            files=None,
+            entity_id=None,
+            kind=None,
+            id=None,
+            version=None,
+            read_only=None,
+            user_id_header=None,
+            x_user_id_header=None,
+            file_service=file_service,
+            session_service=session_service,
+        )
+
+        assert file_service.store_uploaded_file.call_args.kwargs["read_only"] is False
 
 
 class TestUploadBatchEndpoint:

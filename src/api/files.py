@@ -49,6 +49,10 @@ async def upload_file(
     file: UploadFile | None = File(None),
     files: list[UploadFile] | None = File(None),
     entity_id: str | None = Form(None),
+    kind: str | None = Form(None),
+    id: str | None = Form(None),
+    version: str | None = Form(None),
+    read_only: str | None = Form(None),
     user_id_header: str | None = Header(None, alias="User-Id"),
     x_user_id_header: str | None = Header(None, alias="X-User-Id"),
     file_service: FileServiceDep = None,
@@ -58,6 +62,12 @@ async def upload_file(
 
     Accepts files in either 'file' (singular) or 'files' (plural) field names.
     LibreChat uses 'file' while our tests use 'files'.
+
+    Identity form fields (``kind`` / ``id`` / ``version`` / ``read_only``)
+    mirror ``/upload/batch`` so single-file uploads carry the same LibreChat
+    ``CodeEnvFile`` discriminator. ``kind`` / ``id`` land on session metadata
+    and ``read_only`` is persisted per file so skill/agent inputs are echoed
+    as inherited passthroughs rather than generated artifacts.
 
     user_id resolution (most-trustworthy first):
       1. JWT.sub via request.state.user_id (cryptographically authenticated
@@ -71,6 +81,7 @@ async def upload_file(
     """
     jwt_user_id = getattr(request.state, "user_id", None) if request else None
     request_user_id = jwt_user_id or user_id_header or x_user_id_header
+    read_only_flag = (read_only or "").strip().lower() == "true"
     try:
         # Handle both singular and plural field names
         upload_files = []
@@ -153,6 +164,10 @@ async def upload_file(
                 session_metadata["entity_id"] = entity_id
             if request_user_id:
                 session_metadata["user_id"] = request_user_id
+            if kind:
+                session_metadata["kind"] = kind
+            if id:
+                session_metadata["resource_id"] = id
             session = await session_service.create_session(SessionCreate(metadata=session_metadata))
             session_id = session.session_id
 
@@ -173,6 +188,7 @@ async def upload_file(
                 filename=sanitized_name,
                 content=content,
                 content_type=file.content_type,
+                read_only=read_only_flag,
             )
 
             uploaded_files.append(

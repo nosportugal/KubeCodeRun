@@ -140,6 +140,10 @@ class TestUploadFile:
             file=mock_upload_file,
             files=None,
             entity_id="entity-123",
+            kind=None,
+            id=None,
+            version=None,
+            read_only=None,
             file_service=mock_file_service,
             session_service=mock_session_service,
         )
@@ -176,6 +180,10 @@ class TestUploadFile:
             file=file,
             files=None,
             entity_id=None,
+            kind=None,
+            id=None,
+            version=None,
+            read_only=None,
             file_service=mock_file_service,
             session_service=mock_session_service,
         )
@@ -199,6 +207,10 @@ class TestUploadFile:
             file=None,
             files=files,
             entity_id="entity-123",
+            kind=None,
+            id=None,
+            version=None,
+            read_only=None,
             file_service=mock_file_service,
             session_service=mock_session_service,
         )
@@ -216,6 +228,10 @@ class TestUploadFile:
                 file=None,
                 files=None,
                 entity_id="entity-123",
+                kind=None,
+                id=None,
+                version=None,
+                read_only=None,
                 file_service=mock_file_service,
             )
 
@@ -235,6 +251,10 @@ class TestUploadFile:
                     file=mock_upload_file,
                     files=None,
                     entity_id="entity-123",
+                    kind=None,
+                    id=None,
+                    version=None,
+                    read_only=None,
                     file_service=mock_file_service,
                 )
 
@@ -255,6 +275,10 @@ class TestUploadFile:
                     file=None,
                     files=files,
                     entity_id="entity-123",
+                    kind=None,
+                    id=None,
+                    version=None,
+                    read_only=None,
                     file_service=mock_file_service,
                 )
 
@@ -277,6 +301,10 @@ class TestUploadFile:
                     file=mock_upload_file,
                     files=None,
                     entity_id="entity-123",
+                    kind=None,
+                    id=None,
+                    version=None,
+                    read_only=None,
                     file_service=mock_file_service,
                     session_service=mock_session_service,
                 )
