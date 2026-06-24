@@ -162,6 +162,35 @@ class TestUploadResponseShape:
         assert result["session_id"] == "sess-1"
         assert result["files"][0]["fileId"] == "fid-1"
 
+    @pytest.mark.asyncio
+    async def test_upload_preserves_nested_skill_path(self):
+        """Skill bundles upload files whose multipart filename carries a
+        relative path (e.g. ``skillName/SKILL.md`` — see packages/api
+        .../form.ts ``getCodeEnvFileOptions``). The stored name must keep the
+        directory structure instead of being flattened to a basename, so the
+        skill's relative references resolve under /mnt/data."""
+        session_service = MagicMock()
+        session_service.list_sessions_by_entity = AsyncMock(return_value=[])
+        session_service.create_session = AsyncMock(return_value=_mock_session("sess-1"))
+
+        file_service = MagicMock()
+        file_service.store_uploaded_file = AsyncMock(return_value="fid-1")
+
+        result = await upload_file(
+            request=_anon_http_request(),
+            file=_mock_file(filename="skillName/SKILL.md"),
+            files=None,
+            entity_id=None,
+            user_id_header=None,
+            x_user_id_header=None,
+            file_service=file_service,
+            session_service=session_service,
+        )
+
+        stored_name = file_service.store_uploaded_file.call_args.kwargs["filename"]
+        assert stored_name == "skillName/SKILL.md"
+        assert result["files"][0]["filename"] == "skillName/SKILL.md"
+
 
 class TestUploadBatchEndpoint:
     @pytest.mark.asyncio

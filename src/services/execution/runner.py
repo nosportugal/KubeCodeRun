@@ -327,7 +327,12 @@ class CodeExecutionRunner:
         return outputs
 
     def _get_mounted_filenames(self, files: list[dict[str, Any]] | None) -> set:
-        """Get set of mounted filenames for filtering."""
+        """Get set of mounted file names for output filtering.
+
+        Includes the full (possibly nested) relative name, its basename, and
+        the sanitized variants, so a generated-file match works whether the
+        runner reports a nested path (``skillName/SKILL.md``) or a flat name.
+        """
         mounted = set()
         if files:
             try:
@@ -335,10 +340,19 @@ class CodeExecutionRunner:
                     name = f.get("filename") or f.get("name")
                     if name:
                         mounted.add(name)
+                        mounted.add(Path(name).name)
                         mounted.add(OutputProcessor.normalize_filename(name))
             except Exception:
                 pass
         return mounted
+
+    @staticmethod
+    def _relative_under_data(path: str) -> str:
+        """Return the path relative to /mnt/data, or the basename as fallback."""
+        prefix = "/mnt/data/"
+        if path.startswith(prefix):
+            return path[len(prefix) :]
+        return Path(path).name
 
     def _filter_generated_files(
         self,
@@ -348,13 +362,20 @@ class CodeExecutionRunner:
     ) -> list[dict[str, Any]]:
         """Filter generated files, keeping new files and modified mounted files.
 
-        A mounted file is included if its mod_time indicates it was modified
-        during or after execution started (fixes issue #56).
+        Matching is done on the relative path under /mnt/data (and basename as
+        a fallback) so nested mounted files (e.g. skill bundles uploaded as
+        ``skillName/SKILL.md``) are correctly recognized as mounted rather than
+        reported as freshly generated. A mounted file is still included if its
+        mod_time indicates it was modified during or after execution started
+        (fixes issue #56).
         """
         result = []
         for f in generated:
-            name = Path(f.get("path", "")).name
-            if name not in mounted_filenames:
+            path = f.get("path", "")
+            rel = self._relative_under_data(path)
+            base = Path(path).name
+            is_mounted = rel in mounted_filenames or base in mounted_filenames
+            if not is_mounted:
                 # New file — always include
                 result.append(f)
             elif execution_start_unix and f.get("mod_time", 0) >= execution_start_unix:
@@ -401,9 +422,13 @@ class CodeExecutionRunner:
                     files = data.get("files", [])
                     generated_files = []
                     for f in files:
-                        # Skip code files (source files written by the runner)
+                        # Skip code files (source files written by the runner).
+                        # ``name`` may be a nested relative path (e.g.
+                        # ``skillName/out.png``) since the runner lists
+                        # recursively; compare the basename against the known
+                        # source filenames.
                         name = f.get("name", "")
-                        if name in _CODE_FILENAMES:
+                        if Path(name).name in _CODE_FILENAMES:
                             continue
                         if f.get("size", 0) > settings.max_file_size_mb * 1024 * 1024:
                             continue

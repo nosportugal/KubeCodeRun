@@ -160,9 +160,12 @@ async def upload_file(
             # Read file content
             content = await file.read()
 
-            # Sanitize filename before storage so the name on disk in the
-            # execution pod matches what LibreChat reports to the model.
-            sanitized_name = OutputProcessor.sanitize_filename(file.filename)
+            # Sanitize the upload name before storage so the name on disk in
+            # the execution pod matches what LibreChat reports to the model.
+            # sanitize_filepath preserves safe nested directories (e.g.
+            # skill bundles uploaded as ``skillName/SKILL.md``) instead of
+            # flattening them to a basename.
+            sanitized_name = OutputProcessor.sanitize_filepath(file.filename)
 
             # Store file with the sanitized name
             file_id = await file_service.store_uploaded_file(
@@ -317,7 +320,7 @@ async def upload_files_batch(
                 raise ValueError(f"File {upload.filename} exceeds maximum size of {settings.max_file_size_mb}MB")
 
             content = await upload.read()
-            sanitized_name = OutputProcessor.sanitize_filename(upload.filename or "file")
+            sanitized_name = OutputProcessor.sanitize_filepath(upload.filename or "file")
             file_id = await file_service.store_uploaded_file(
                 session_id=session_id,
                 filename=sanitized_name,
