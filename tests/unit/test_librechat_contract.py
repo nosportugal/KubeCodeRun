@@ -654,3 +654,72 @@ class TestGetSessionObject:
         )
 
         assert result["lastModified"] == "2026-03-15T10:30:00.000Z"
+
+
+class TestProgrammaticToolCallingContract:
+    """Wire contract for ``POST /exec/programmatic`` (@librechat/agents PTC).
+
+    The agents ``ProgrammaticToolCalling`` client POSTs ``{code, tools, ...}``
+    (initial) or ``{continuation_token, tool_results}`` (continuation) and reads
+    ``{status, tool_calls:[{id,name,input}], continuation_token}`` /
+    ``{status:'completed', stdout, stderr, files}``.
+    """
+
+    def test_language_lang_alias_normalizes(self):
+        from src.models.programmatic import ProgrammaticRequest
+
+        # bash client sends `lang`; canonical field is `language`
+        assert ProgrammaticRequest(code="x", lang="bash").resolved_language == "bash"
+        # `language` wins when both present
+        assert ProgrammaticRequest(code="x", language="python", lang="bash").resolved_language == "python"
+        # default is python
+        assert ProgrammaticRequest(code="x").resolved_language == "python"
+
+    def test_continuation_detection(self):
+        from src.models.programmatic import ProgrammaticRequest, ToolResultIn
+
+        initial = ProgrammaticRequest(code="x", tools=[])
+        assert initial.is_continuation is False
+        cont = ProgrammaticRequest(continuation_token="tok", tool_results=[ToolResultIn(call_id="call_001", result=1)])
+        assert cont.is_continuation is True
+
+    def test_tool_result_shape(self):
+        from src.models.programmatic import ToolResultIn
+
+        tr = ToolResultIn(call_id="call_001", result={"k": "v"}, is_error=False)
+        assert tr.call_id == "call_001"
+        assert tr.result == {"k": "v"}
+        assert tr.is_error is False
+        # error result carries a message
+        err = ToolResultIn(call_id="call_002", result=None, is_error=True, error_message="boom")
+        assert err.is_error is True
+        assert err.error_message == "boom"
+
+    def test_tool_call_out_shape(self):
+        from src.models.programmatic import ProgrammaticToolCall
+
+        tc = ProgrammaticToolCall(id="call_001", name="get_weather", input={"city": "SF"})
+        dumped = tc.model_dump()
+        assert dumped == {"id": "call_001", "name": "get_weather", "input": {"city": "SF"}}
+
+    def test_response_status_values(self):
+        from src.models.programmatic import ProgrammaticResponse
+
+        assert ProgrammaticResponse(status="tool_call_required").status == "tool_call_required"
+        assert ProgrammaticResponse(status="completed").status == "completed"
+        assert ProgrammaticResponse(status="error").status == "error"
+
+    def test_completed_response_carries_files_and_session(self):
+        from src.models.programmatic import ProgrammaticResponse
+
+        resp = ProgrammaticResponse(
+            status="completed",
+            stdout="done",
+            stderr="",
+            files=[FileRef(id="f1", name="out.csv", session_id="s1")],
+            session_id="s1",
+        )
+        dumped = resp.model_dump()
+        assert dumped["status"] == "completed"
+        assert dumped["files"][0]["storage_session_id"] == "s1"
+        assert dumped["session_id"] == "s1"
