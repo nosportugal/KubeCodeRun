@@ -102,6 +102,25 @@ class TestFileRefStorageSessionId:
         assert "version" not in dumped
 
 
+class TestFileRefInherited:
+    """``inherited`` is emitted inside each files[] entry so LibreChat's host
+    (callbacks.js / tools.js ``if (file.inherited) continue``) and
+    @librechat/agents (CodeSessionFileSummary ``file.inherited !== true``) can
+    skip read-only passthroughs when building user downloads and the model
+    summary. The flag lives on the file ref, not a separate response field."""
+
+    def test_inherited_defaults_false(self):
+        ref = FileRef(id="f", name="out.png", session_id="sess-A")
+        assert ref.model_dump()["inherited"] is False
+
+    def test_inherited_true_round_trips(self):
+        ref = FileRef(id="skill-1", name="skillName/SKILL.md", session_id="sess-A", inherited=True)
+        dumped = ref.model_dump()
+        assert dumped["inherited"] is True
+        assert dumped["id"] == "skill-1"
+        assert dumped["name"] == "skillName/SKILL.md"
+
+
 # ---------------------------------------------------------------------------
 # Endpoint contract — /upload, /upload/batch, /files/{session_id}
 # ---------------------------------------------------------------------------

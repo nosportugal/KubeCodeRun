@@ -790,9 +790,12 @@ class ExecutionOrchestrator:
         auto_mounted = sum(1 for f in ctx.mounted_files if f.get("auto_mounted")) if ctx.mounted_files else 0
 
         # Echo read-only inputs (skill/agent bundles the caller already owns)
-        # as inherited passthroughs. They are deliberately kept out of `files`
-        # so the current @librechat/agents consumer does not surface them as
-        # generated download artifacts (it ignores the `inherited` flag).
+        # inside `files` flagged inherited=True. LibreChat's host
+        # (callbacks.js / tools.js) and @librechat/agents
+        # (CodeSessionFileSummary) skip inherited entries when building user
+        # download artifacts, re-downloads, and the model-facing summary, so
+        # they are never surfaced as generated outputs. This matches the SaaS
+        # code-interpreter wire contract.
         inherited_files = [
             FileRef(
                 id=f["file_id"],
@@ -806,10 +809,9 @@ class ExecutionOrchestrator:
 
         return ExecResponse(
             session_id=ctx.session_id,
-            files=ctx.generated_files or [],
+            files=(ctx.generated_files or []) + inherited_files,
             stdout=ctx.stdout,
             stderr=ctx.stderr,
-            inherited_files=inherited_files,
             has_state=has_state,
             state_size=state_size,
             state_hash=state_hash,

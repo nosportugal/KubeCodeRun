@@ -1228,7 +1228,7 @@ class TestBuildResponse:
         assert response.state_hash == "abc123"
 
     def test_build_response_echoes_readonly_as_inherited(self, orchestrator):
-        """Read-only mounted inputs are echoed in inherited_files, not files (Gap A)."""
+        """Read-only mounted inputs are echoed in files[] flagged inherited=True (Gap A)."""
         request = ExecRequest(code="print('hi')", lang="py")
         ctx = ExecutionContext(
             request=request,
@@ -1257,17 +1257,16 @@ class TestBuildResponse:
 
         response = orchestrator._build_response(ctx)
 
-        assert len(response.inherited_files) == 1
-        inherited = response.inherited_files[0]
-        assert inherited.id == "skill-1"
-        assert inherited.name == "skillName/SKILL.md"
-        assert inherited.session_id == "upload-sess"
-        assert inherited.inherited is True
-        # Read-only inputs must NOT leak into the generated files list.
-        assert all(f.name != "skillName/SKILL.md" for f in response.files)
+        # The read-only input is echoed inside files[] flagged inherited=True.
+        inherited = [f for f in response.files if f.inherited]
+        assert len(inherited) == 1
+        assert inherited[0].id == "skill-1"
+        assert inherited[0].name == "skillName/SKILL.md"
+        assert inherited[0].session_id == "upload-sess"
+        assert inherited[0].inherited is True
 
     def test_build_response_no_inherited_when_no_readonly(self, orchestrator):
-        """No read-only inputs means an empty inherited_files list."""
+        """No read-only inputs means no inherited entries in files[]."""
         request = ExecRequest(code="print('hi')", lang="py")
         ctx = ExecutionContext(
             request=request,
@@ -1283,7 +1282,7 @@ class TestBuildResponse:
 
         response = orchestrator._build_response(ctx)
 
-        assert response.inherited_files == []
+        assert all(f.inherited is False for f in response.files)
 
 
 class TestCleanupExtended:
