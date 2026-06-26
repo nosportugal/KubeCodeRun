@@ -84,7 +84,12 @@ def extract_pending_from_stdout(
 
 
 def _find_last_line(lines: list[str], marker: str, search_from: int) -> int | None:
+    # Match the sentinel line exactly. The harness emits the marker on its own
+    # line, so we tolerate only a trailing carriage return (CRLF-captured
+    # stdout). We deliberately do NOT strip surrounding whitespace: that would
+    # let user output which merely contains the marker padded by spaces be
+    # mistaken for a sentinel and shift the byte-accurate reconstruction.
     for i in range(len(lines) - 1, search_from - 1, -1):
-        if lines[i].strip() == marker:
+        if lines[i].rstrip("\r") == marker:
             return i
     return None

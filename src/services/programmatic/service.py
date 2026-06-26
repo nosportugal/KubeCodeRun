@@ -20,6 +20,7 @@ from ...models.exec import ExecRequest
 from ...models.programmatic import (
     ProgrammaticRequest,
     ProgrammaticResponse,
+    ProgrammaticTool,
     ProgrammaticToolCall,
 )
 from ..orchestrator import ExecutionOrchestrator
@@ -29,7 +30,7 @@ from .constants import (
     PTC_HISTORY_FILENAME,
     is_reserved_ptc_filename,
 )
-from .harness import build_python_code
+from .harness import build_python_code, normalize_python_function_name
 from .sentinel import extract_pending_from_stdout
 from .state import ExecutionState, ProgrammaticStateStore
 
@@ -43,6 +44,32 @@ class ProgrammaticError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.message = message
+
+
+def _validate_tool_names(tools: list[ProgrammaticTool]) -> None:
+    """Reject tool names that would generate invalid Python in the replay harness.
+
+    An empty/whitespace name or one with no identifier-safe characters yields
+    ``async def ()`` (a syntax error) which would otherwise surface as a
+    confusing ``completed`` response carrying a traceback instead of a clear
+    400. Two distinct names that normalize to the same identifier are also
+    rejected, since the second stub would silently shadow the first.
+    """
+    seen: dict[str, str] = {}
+    for tool in tools:
+        if not tool.name or not tool.name.strip():
+            raise ProgrammaticError(400, "Each tool must have a non-empty name")
+        normalized = normalize_python_function_name(tool.name)
+        if not normalized:
+            raise ProgrammaticError(400, f'Tool name "{tool.name}" has no identifier-safe characters')
+        prior = seen.get(normalized)
+        if prior is not None and prior != tool.name:
+            raise ProgrammaticError(
+                400,
+                f'Tool names "{prior}" and "{tool.name}" both normalize to the Python '
+                f'identifier "{normalized}"; rename one to avoid a collision',
+            )
+        seen[normalized] = tool.name
 
 
 class ProgrammaticService:
@@ -84,6 +111,7 @@ class ProgrammaticService:
             raise ProgrammaticError(
                 400, f"Too many tools provided ({len(request.tools)}). Maximum is {MAX_TOOLS_PER_REQUEST}."
             )
+        _validate_tool_names(request.tools)
         if request.resolved_language == "bash":
             raise ProgrammaticError(400, "bash programmatic tool calling is not supported by this server")
         if request.resolved_language != "python":

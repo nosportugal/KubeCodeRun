@@ -152,6 +152,24 @@ class TestValidation:
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_name", ["", "   ", "!!!"])
+    async def test_invalid_tool_name_rejected(self, service, bad_name):
+        with pytest.raises(ProgrammaticError) as exc:
+            await service.execute(ProgrammaticRequest(code="x", tools=[ProgrammaticTool(name=bad_name)]))
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_colliding_tool_names_rejected(self, service):
+        # "get-weather" and "get_weather" both normalize to "get_weather"
+        req = ProgrammaticRequest(
+            code="x",
+            tools=[ProgrammaticTool(name="get-weather"), ProgrammaticTool(name="get_weather")],
+        )
+        with pytest.raises(ProgrammaticError) as exc:
+            await service.execute(req)
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
     async def test_bash_rejected(self, service):
         with pytest.raises(ProgrammaticError) as exc:
             await service.execute(

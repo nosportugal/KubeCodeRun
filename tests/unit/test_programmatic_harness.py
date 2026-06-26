@@ -10,9 +10,9 @@ from src.services.programmatic.constants import (
     is_reserved_ptc_filename,
 )
 from src.services.programmatic.harness import (
-    _normalize_python_function_name,
     build_python_code,
     build_replay_preamble,
+    normalize_python_function_name,
     wrap_user_code_in_async,
 )
 from src.services.programmatic.sentinel import extract_pending_from_stdout
@@ -72,7 +72,7 @@ class TestHarnessGeneration:
         ],
     )
     def test_normalize_python_function_name(self, raw, expected):
-        assert _normalize_python_function_name(raw) == expected
+        assert normalize_python_function_name(raw) == expected
 
 
 class TestSentinelExtraction:
@@ -110,6 +110,24 @@ class TestSentinelExtraction:
         stdout = start + "\nnot-json\n" + end + "\n"
         clean, pending = extract_pending_from_stdout(stdout, "e1")
         assert pending is None
+
+    def test_whitespace_padded_marker_not_matched(self):
+        # User output that merely contains the marker surrounded by whitespace
+        # must NOT be treated as a sentinel (exact line match required).
+        start, end = build_scoped_sentinel("e1")
+        body = json.dumps({"pending": [{"call_id": "call_001", "tool_name": "t", "input": {}}]})
+        stdout = "  " + start + "  \n" + body + "\n" + end + "\n"
+        clean, pending = extract_pending_from_stdout(stdout, "e1")
+        assert pending is None
+        assert clean == stdout
+
+    def test_trailing_carriage_return_tolerated(self):
+        # CRLF-captured stdout: the marker line ends with "\r"; still matches.
+        start, end = build_scoped_sentinel("e1")
+        body = json.dumps({"pending": [{"call_id": "call_001", "tool_name": "t", "input": {}}]})
+        stdout = "out\r\n" + start + "\r\n" + body + "\r\n" + end + "\r\n"
+        clean, pending = extract_pending_from_stdout(stdout, "e1")
+        assert pending == [{"call_id": "call_001", "tool_name": "t", "input": {}}]
 
 
 class TestReservedFilenames:

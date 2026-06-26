@@ -28,8 +28,12 @@ _PYTHON_KEYWORDS = {
 }  # fmt: skip
 
 
-def _normalize_python_function_name(name: str) -> str:
-    """Normalize a tool name into a valid, non-keyword Python identifier."""
+def normalize_python_function_name(name: str) -> str:
+    """Normalize a tool name into a valid, non-keyword Python identifier.
+
+    Returns an empty string when ``name`` contains no identifier-safe
+    characters (callers should reject such tool names before generation).
+    """
     normalized = "".join("_" if ch in "- \t" else ch for ch in name)
     normalized = "".join(ch for ch in normalized if ch.isalnum() or ch == "_")
     if normalized and normalized[0].isdigit():
@@ -128,7 +132,7 @@ def _generate_tool_stub(tool: dict[str, Any]) -> str:
     return_type = _infer_return_type(tool.get("description"))
     docstring = _generate_docstring(tool)
     input_dict = _generate_input_dict(tool.get("parameters"))
-    py_name = _normalize_python_function_name(name)
+    py_name = normalize_python_function_name(name)
     name_comment = f"    # Original tool name: {name}\n" if py_name != name else ""
     return (
         f"async def {py_name}({params}) -> {return_type}:\n"
